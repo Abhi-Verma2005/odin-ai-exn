@@ -54,7 +54,15 @@
   * {
     @apply border-border;
   }
-  body {
+  
+  html, body {
     @apply bg-background text-foreground;
+    height: 100%;
+    width: 100%;
+  }
+  
+  #root {
+    height: 100%;
+    width: 100%;
   }
 }

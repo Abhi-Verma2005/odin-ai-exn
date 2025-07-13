@@ -56,6 +56,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import Chat from '@/components/Chat'
 
 interface ChatBoxProps {
   visible: boolean
@@ -68,6 +69,8 @@ interface ChatBoxProps {
   selectedModel: ValidModel | undefined
 }
 
+// render bot logo and scripts which will send data to backend
+
 const ChatBox: React.FC<ChatBoxProps> = ({
   context,
   visible,
@@ -76,424 +79,19 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   heandelModel,
   selectedModel,
 }) => {
-  const [value, setValue] = React.useState('')
-  const [chatHistory, setChatHistory] = React.useState<ChatHistory[]>([])
-  const [priviousChatHistory, setPreviousChatHistory] = React.useState<
-    ChatHistory[]
-  >([])
-  const [isResponseLoading, setIsResponseLoading] =
-    React.useState<boolean>(false)
-  // const chatBoxRef = useRef<HTMLDivElement>(null)
-
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
-  const lastMessageRef = useRef<HTMLDivElement>(null)
-
-  const [offset, setOffset] = React.useState<number>(0)
-  const [totalMessages, setTotalMessages] = React.useState<number>(0)
-  const [isPriviousMsgLoading, setIsPriviousMsgLoading] =
-    React.useState<boolean>(false)
-  const { fetchChatHistory, saveChatHistory } = useIndexDB()
-
-  const getProblemName = () => {
-    const url = window.location.href
-    const match = /\/problems\/([^/]+)/.exec(url)
-    return match ? match[1] : 'Unknown Problem'
-  }
-
-  const problemName = getProblemName()
-  const inputFieldRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (lastMessageRef.current && !isPriviousMsgLoading) {
-      lastMessageRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-    setTimeout(() => {
-      inputFieldRef.current?.focus()
-    }, 0)
-  }, [chatHistory, isResponseLoading, visible])
-
-  const heandelClearChat = async () => {
-    const { clearChatHistory } = useIndexDB()
-    await clearChatHistory(problemName)
-    setChatHistory([])
-    setPreviousChatHistory([])
-  }
-
-  /**
-   * Handles the generation of an AI response.
-   *
-   * This function performs the following steps:
-   * 1. Initializes a new instance of `ModalService`.
-   * 2. Selects a modal using the provided model and API key.
-   * 3. Determines the programming language from the UI.
-   * 4. Extracts the user's current code from the document.
-   * 5. Modifies the system prompt with the problem statement, programming language, and extracted code.
-   * 6. Generates a response using the modified system prompt.
-   * 7. Updates the chat history with the generated response or error message.
-   * 8. Scrolls the chat box into view.
-   *
-   * @async
-   * @function handleGenerateAIResponse
-   * @returns {Promise<void>} A promise that resolves when the AI response generation is complete.
-   */
-  const handleGenerateAIResponse = async (): Promise<void> => {
-    const modalService = new ModalService()
-
-    modalService.selectModal(model, apikey)
-
-    let programmingLanguage = 'UNKNOWN'
-
-    const changeLanguageButton = document.querySelector(
-      'button.rounded.items-center.whitespace-nowrap.inline-flex.bg-transparent.dark\\:bg-dark-transparent.text-text-secondary.group'
-    )
-    if (changeLanguageButton) {
-      if (changeLanguageButton.textContent)
-        programmingLanguage = changeLanguageButton.textContent
-    }
-    const userCurrentCodeContainer = document.querySelectorAll('.view-line')
-
-    const extractedCode = extractCode(userCurrentCodeContainer)
-
-    const systemPromptModified = SYSTEM_PROMPT.replace(
-      /{{problem_statement}}/gi,
-      context.problemStatement
-    )
-      .replace(/{{programming_language}}/g, programmingLanguage)
-      .replace(/{{user_code}}/g, extractedCode)
-
-    const PCH = parseChatHistory(chatHistory)
-
-    const { error, success } = await modalService.generate({
-      prompt: `${value}`,
-      systemPrompt: systemPromptModified,
-      messages: PCH,
-      extractedCode: extractedCode,
-    })
-
-    if (error) {
-      const errorMessage: ChatHistory = {
-        role: 'assistant',
-        content: error.message,
-      }
-      await saveChatHistory(problemName, [
-        ...priviousChatHistory,
-        { role: 'user', content: value },
-        errorMessage,
-      ])
-      setPreviousChatHistory((prev) => [...prev, errorMessage])
-      setChatHistory((prev) => {
-        const updatedChatHistory: ChatHistory[] = [...prev, errorMessage]
-        return updatedChatHistory
-      })
-      lastMessageRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-
-    if (success) {
-      const res: ChatHistory = {
-        role: 'assistant',
-        content: success,
-      }
-      await saveChatHistory(problemName, [
-        ...priviousChatHistory,
-        { role: 'user', content: value },
-        res,
-      ])
-      setPreviousChatHistory((prev) => [...prev, res])
-      setChatHistory((prev) => [...prev, res])
-      setValue('')
-      lastMessageRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-
-    setIsResponseLoading(false)
-    setTimeout(() => {
-      inputFieldRef.current?.focus()
-    }, 0)
-  }
-
-  const loadInitialChatHistory = async () => {
-    const { totalMessageCount, chatHistory, allChatHistory } =
-      await fetchChatHistory(problemName, LIMIT_VALUE, 0)
-    setPreviousChatHistory(allChatHistory || [])
-
-    setTotalMessages(totalMessageCount)
-    setChatHistory(chatHistory)
-    setOffset(LIMIT_VALUE)
-  }
-
-  useEffect(() => {
-    loadInitialChatHistory()
-  }, [problemName])
-
-  const loadMoreMessages = async () => {
-    if (totalMessages < offset) {
-      return
-    }
-    setIsPriviousMsgLoading(true)
-    const { chatHistory: moreMessages } = await fetchChatHistory(
-      problemName,
-      LIMIT_VALUE,
-      offset
-    )
-
-    if (moreMessages.length > 0) {
-      setChatHistory((prev) => [...moreMessages, ...prev]) // Correctly merge the new messages with the previous ones
-      setOffset((prevOffset) => prevOffset + LIMIT_VALUE)
-    }
-
-    setTimeout(() => {
-      setIsPriviousMsgLoading(false)
-    }, 500)
-  }
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget
-    if (target.scrollTop === 0) {
-      console.log('Reached the top, loading more messages...')
-      loadMoreMessages()
-    }
-  }
-
-  const onSendMessage = async (value: string) => {
-    setIsResponseLoading(true)
-    const newMessage: ChatHistory = { role: 'user', content: value }
-
-    setPreviousChatHistory((prev) => {
-      return [...prev, newMessage]
-    })
-    setChatHistory([...chatHistory, newMessage])
-
-    lastMessageRef.current?.scrollIntoView({ behavior: 'smooth' })
-    handleGenerateAIResponse()
-  }
-
-  if (!visible) return <></>
+  if (!visible) return null
 
   return (
-    <Card className="mb-2 ">
-      <div className="flex gap-2 items-center justify-between h-20 rounded-t-lg p-4">
-        <div className="flex gap-2 items-center justify-start">
-          <div className="bg-white rounded-full p-2">
-            <Bot color="#000" className="h-6 w-6" />
-          </div>
-          <div>
-            <h3 className="font-bold text-lg">Need Help?</h3>
-            <h6 className="font-normal text-xs">Always online</h6>
-          </div>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="tertiary" size={'icon'}>
-              <EllipsisVertical size={18} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56">
-            <DropdownMenuLabel className="flex items-center">
-              <Settings size={16} strokeWidth={1.5} className="mr-2" />{' '}
-              {
-                VALID_MODELS.find((model) => model.name === selectedModel)
-                  ?.display
-              }
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Bot size={16} strokeWidth={1.5} /> Change Model
-                </DropdownMenuSubTrigger>
-                <DropdownMenuPortal>
-                  <DropdownMenuSubContent>
-                    <DropdownMenuRadioGroup
-                      value={selectedModel}
-                      onValueChange={(v) => heandelModel(v as ValidModel)}
-                    >
-                      {VALID_MODELS.map((modelOption) => (
-                        <DropdownMenuRadioItem
-                          key={modelOption.name}
-                          value={modelOption.name}
-                        >
-                          {modelOption.display}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuSubContent>
-                </DropdownMenuPortal>
-              </DropdownMenuSub>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={heandelClearChat}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.backgroundColor =
-                  'rgb(185 28 28 / 0.35)')
-              }
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '')}
-            >
-              <Eraser size={14} strokeWidth={1.5} /> Clear Chat
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+    <div className="fixed bottom-4 right-4 z-50">
+      <div className="w-[400px] h-[600px] min-w-[320px] min-h-[400px]">
+        <Chat 
+          model={model} 
+          apiKey={apikey} 
+          problemStatement={context.problemStatement}
+          className="w-full h-full"
+        />
       </div>
-      <CardContent className="p-2">
-        {chatHistory.length > 0 ? (
-          <ScrollArea
-            className="space-y-4 h-[500px] w-[400px] p-2"
-            ref={scrollAreaRef}
-            onScroll={handleScroll}
-          >
-            {totalMessages > offset && (
-              <div className="flex w-full items-center justify-center">
-                <Button
-                  className="text-sm p-1 m-x-auto bg-transpernent text-white hover:bg-transpernent"
-                  onClick={loadMoreMessages}
-                >
-                  Load Previous Messages
-                </Button>
-              </div>
-            )}
-            {chatHistory.map((message, index) => (
-              <div
-                key={index}
-                className={cn(
-                  'flex w-max max-w-[75%] flex-col gap-2 px-3 py-2 text-sm my-4',
-                  message.role === 'user'
-                    ? 'ml-auto bg-primary text-primary-foreground rounded-bl-lg rounded-tl-lg rounded-tr-lg '
-                    : 'bg-muted rounded-br-lg rounded-tl-lg rounded-tr-lg'
-                )}
-              >
-                <>
-                  <p className="max-w-80">
-                    {typeof message.content === 'string'
-                      ? message.content
-                      : message.content.feedback}
-                  </p>
-
-                  {!(typeof message.content === 'string') && (
-                    <Accordion type="multiple">
-                      {message.content?.hints &&
-                        message.content.hints.length > 0 && (
-                          <AccordionItem value="item-1" className="max-w-80">
-                            <AccordionTrigger>Hints 👀</AccordionTrigger>
-                            <AccordionContent>
-                              <ul className="space-y-4">
-                                {message.content?.hints?.map((e) => (
-                                  <li key={e}>{e}</li>
-                                ))}
-                              </ul>
-                            </AccordionContent>
-                          </AccordionItem>
-                        )}
-                      {message.content?.snippet && (
-                        <AccordionItem value="item-2" className="max-w-80">
-                          <AccordionTrigger>Code 🧑🏻‍💻</AccordionTrigger>
-
-                          <AccordionContent>
-                            <div className="mt-4 rounded-md">
-                              <div className="relative">
-                                <Copy
-                                  onClick={() => {
-                                    if (typeof message.content !== 'string')
-                                      navigator.clipboard.writeText(
-                                        `${message.content?.snippet}`
-                                      )
-                                  }}
-                                  className="absolute right-2 top-2 h-4 w-4"
-                                />
-                                <Highlight
-                                  theme={themes.dracula}
-                                  code={message.content?.snippet || ''}
-                                  language={
-                                    message.content?.programmingLanguage?.toLowerCase() ||
-                                    'javascript'
-                                  }
-                                >
-                                  {({
-                                    className,
-                                    style,
-                                    tokens,
-                                    getLineProps,
-                                    getTokenProps,
-                                  }) => (
-                                    <pre
-                                      style={style}
-                                      className={cn(
-                                        className,
-                                        'p-3 rounded-md'
-                                      )}
-                                    >
-                                      {tokens.map((line, i) => (
-                                        <div
-                                          key={i}
-                                          {...getLineProps({ line })}
-                                        >
-                                          {line.map((token, key) => (
-                                            <span
-                                              key={key}
-                                              {...getTokenProps({ token })}
-                                            />
-                                          ))}
-                                        </div>
-                                      ))}
-                                    </pre>
-                                  )}
-                                </Highlight>
-                              </div>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      )}
-                    </Accordion>
-                  )}
-                </>
-              </div>
-            ))}
-            {isResponseLoading && (
-              <div className={'flex w-max max-w-[75%] flex-col my-2'}>
-                <div className="w-5 h-5 rounded-full animate-pulse bg-primary"></div>
-              </div>
-            )}
-            <div ref={lastMessageRef} />
-          </ScrollArea>
-        ) : (
-          <div>
-            <p className="flex items-center justify-center h-[510px] w-[400px] text-center space-y-4">
-              No messages yet.
-            </p>
-          </div>
-        )}
-      </CardContent>
-      <CardFooter>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (value.trim().length === 0) return
-            onSendMessage(value)
-            setValue('')
-          }}
-          className="flex w-full items-center space-x-2"
-        >
-          <Input
-            id="message"
-            placeholder="Type your message..."
-            className="flex-1"
-            autoComplete="off"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            disabled={isResponseLoading}
-            required
-            ref={inputFieldRef}
-          />
-          <Button
-            type="submit"
-            className="bg-[#fafafa] rounded-lg text-black"
-            size="icon"
-            disabled={value.length === 0}
-          >
-            <Send className="h-4 w-4" />
-            <span className="sr-only">Send</span>
-          </Button>
-        </form>
-      </CardFooter>
-    </Card>
+    </div>
   )
 }
 
@@ -632,7 +230,17 @@ const ContentPage: React.FC = () => {
           selectedModel={selectedModel}
         />
       )}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button
+          size={'icon'}
+          onClick={() => {
+            chrome.runtime.sendMessage({ action: 'openSidePanel' })
+          }}
+          className="bg-blue-600 hover:bg-blue-700"
+          title="Open in Side Panel"
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
         <Button
           size={'icon'}
           onClick={() => setChatboxExpanded(!chatboxExpanded)}

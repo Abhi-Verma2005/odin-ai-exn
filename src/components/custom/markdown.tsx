@@ -1,8 +1,8 @@
-import React, { memo, useEffect } from "react";
+import { memo, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import hljs from 'highlight.js';
-import { MermaidChart } from './mermaid-chart';
+import { MermaidChart } from "./mermaid-chart";
 // Import your favorite theme
 // import 'highlight.js/styles/tokyo-night-dark.css'; // This is already a good dark theme
 // Other great options:

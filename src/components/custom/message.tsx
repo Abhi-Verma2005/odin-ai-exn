@@ -1,33 +1,25 @@
-// message.tsx (updated - key changes only)
-"use client";
-
-import { Attachment, ToolInvocation } from "ai";
+import { ToolInvocation } from "ai";
 import { motion } from "framer-motion";
 import { ReactNode } from "react";
 
 import { useSidebar } from "@/context/SidebarProvider";
 import { BotIcon, UserIcon } from "@/components/custom/icons";
-import { Markdown } from "@/components/markdown";
-import { PreviewAttachment } from "@/components/preview-attachment";
+import { Markdown } from "@/components/custom/markdown";
 import { ShiningText } from "@/components/ui/shining-text";
 import CompactQuestionsViewer from "@/components/dsa/Questions";
 import DSAProgressDashboard from "@/components/dsa/Progress";
 import UserSubmission from "@/components/dsa/UserSubmission";
 
 export const Message = ({
-  chatId,
   role,
   content,
   toolInvocations,
-  attachments,
   append,
   isStreaming = false,
 }: {
-  chatId: string;
   role: string;
   content: string | ReactNode;
   toolInvocations: Array<ToolInvocation> | undefined;
-  attachments?: Array<Attachment>;
   append?: (message: any) => void;
   isStreaming?: boolean;
 }) => {
@@ -131,14 +123,6 @@ export const Message = ({
                 );
               }
             })}
-          </div>
-        )}
-
-        {attachments && (
-          <div className="flex flex-row gap-2">
-            {attachments.map((attachment) => (
-              <PreviewAttachment key={attachment.url} attachment={attachment} />
-            ))}
           </div>
         )}
       </div>

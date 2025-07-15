@@ -7,6 +7,11 @@ import { Attachment, Message } from "ai";
 import { useChat } from "ai/react";
 import { useState, useRef, useEffect } from "react";
 import Overview from "./custom/overview";
+import { Message as PreviewMessage } from "./custom/message";
+import { SearchLoader } from "./custom/search-loader";
+import { ArrowDown, GripVertical } from "lucide-react";
+import { MultimodalInput } from "./custom/multimodal-input";
+import { Sidebar } from "./custom/sidebar";
 export function Chat({
   id,
   initialMessages,
@@ -167,10 +172,8 @@ export function Chat({
             {messages.map((message, idx) => (
               <PreviewMessage
                 key={message.id}
-                chatId={id}
                 role={message.role}
                 content={message.content}
-                attachments={message.experimental_attachments}
                 toolInvocations={message.toolInvocations}
                 append={append}
                 isStreaming={
@@ -184,7 +187,6 @@ export function Chat({
             {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
               <PreviewMessage
                 key="thinking-shimmer"
-                chatId={id}
                 role="assistant"
                 content={''}
                 toolInvocations={[]}
